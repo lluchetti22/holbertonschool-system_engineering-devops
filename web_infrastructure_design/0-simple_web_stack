@@ -1,20 +1,43 @@
 # 0. Simple web stack
 
-## The journey of a request
+![Simple one-server web infrastructure](./0-simple_web_stack_whiteboard.png)
 
-A user types `www.foobar.com` into their browser. Before anything else can happen, that name has to become an IP address, so the browser asks the DNS system to resolve it. The `www` record is a **domain name** entry — specifically an **A record** (or in some setups a CNAME pointing to another name) that maps `www.foobar.com` to the IP `8.8.8.8`. The role of the domain name here is to give people a memorable name instead of forcing them to type raw IP addresses, and to let you point that name at whatever server you're currently using.
+## Explanation, starting from the user
 
-Once resolved, the browser sends an HTTP request straight to `8.8.8.8`. That's a single **server** — a physical or virtual machine with its own CPU, RAM, disk, and OS, sitting somewhere reachable over the internet, running the software that answers requests. The server communicates with the user's computer using **HTTP** (or HTTPS), the protocol both sides agree to speak over the network.
+A user opens their browser and types `www.foobar.com` to reach the website. Before the browser can send any request, it has to turn that name into an IP address, so it queries the DNS system. The domain `foobar.com` has a `www` record configured to point to the server's IP, `8.8.8.8`. DNS returns that IP, and the browser then sends an HTTP request directly to `8.8.8.8`.
 
-## What's inside that one server
+On that single server, the request first hits the **web server (Nginx)**. Nginx handles the raw HTTP request and either serves it directly (for static files) or forwards it to the **application server**. The application server runs the **application files** (the code base) — the actual logic of the website — and, when it needs data, queries the **database (MySQL)**. The application server builds a response using that data and hands it back through Nginx, which sends it over the network to the user's browser, which renders the page.
 
-- **Web server (Nginx)** — the first thing that receives the incoming request. Its role is to handle the raw HTTP request, serve static files directly (images, CSS, JS), and decide when to hand off dynamic requests to the application.
-- **Application server** — receives what Nginx forwards to it and actually executes the application logic (business rules, routing, generating dynamic pages).
-- **Application files (code base)** — the code the application server runs — the actual website/app logic.
-- **Database (MySQL)** — stores and retrieves persistent data (user accounts, posts, etc.). The application server queries it and uses the result to build the response sent back to the user.
+## Specifics about this infrastructure
 
-## Why this setup has problems
+**What is a server?**
+A server is a physical or virtual machine — with its own CPU, RAM, storage, and operating system — that is connected to a network and runs software (like a web server or database) to respond to requests from other computers (clients).
 
-- **SPOF (Single Point of Failure)** — everything (Nginx, app server, code, DB) lives on one machine. If that server crashes, gets overloaded, or loses network connectivity, the entire site goes down. There's no redundancy anywhere in the stack.
-- **Downtime during maintenance** — because the web server, app server, and DB share the same box, deploying new code or restarting the web server to apply a config change takes the whole site offline, even briefly. There's no way to update one piece without disturbing the others.
-- **Can't scale for traffic** — one server has a fixed ceiling on CPU, RAM, and connections. When traffic spikes past what that machine can handle, there's no second server to share the load — you can only scale *up* (buy a bigger machine), not *out* (add more machines), and even scaling up has a hard limit.
+**What is the role of the domain name?**
+A domain name (`foobar.com`) gives the website a human-readable, memorable name instead of requiring users to remember and type a raw IP address. It also lets the owner point that name to a different server or IP later without users needing to change anything.
+
+**What type of DNS record is `www` in `www.foobar.com`?**
+It is an **A record** (or in some configurations a CNAME record pointing to another name) — a record that maps the subdomain `www.foobar.com` to the server's IP address, `8.8.8.8`.
+
+**What is the role of the web server?**
+Nginx receives incoming HTTP requests, serves static content (HTML, CSS, JS, images) directly, and passes dynamic requests on to the application server. It's the front door of the infrastructure.
+
+**What is the role of the application server?**
+The application server executes the application's business logic — it runs the code base, processes the request, interacts with the database as needed, and generates the dynamic content that gets sent back to the user.
+
+**What is the role of the database?**
+MySQL stores and retrieves the website's persistent data (users, posts, orders, etc.). The application server reads from and writes to the database to build responses and save information.
+
+**What does the server use to communicate with the user's computer?**
+The server and the user's browser communicate over the network using the **HTTP** (or HTTPS) protocol, both built on top of TCP/IP.
+
+## Issues with this infrastructure
+
+**SPOF (Single Point of Failure)**
+Every component — Nginx, the application server, the code, and the database — runs on one single server. If that server fails (hardware failure, crash, network outage), the entire website goes down with no fallback.
+
+**Downtime when maintenance is needed**
+Because everything shares the same machine, routine maintenance causes an outage. For example, deploying new code or updating the web server's configuration requires restarting Nginx, which drops incoming connections and takes the site offline, even if only briefly.
+
+**Cannot scale if traffic increases**
+A single server has a fixed amount of CPU, RAM, and network capacity. Once traffic exceeds what that machine can handle, there is no second server to share the load — the only option is scaling *up* (a bigger machine), which has a hard ceiling, rather than scaling *out* (adding more machines).
