@@ -1,0 +1,13 @@
+# 3. Scale up
+
+![Scaled-up web infrastructure with clustered load balancers and split components](./3-scale_up.png)
+
+## Explanation, starting from the user
+
+A user goes to `www.foobar.com`. DNS resolves the name to the load balancer cluster. That cluster is made of two HAProxy nodes — **LB 1** (active) and **LB 2** (passive) — configured together so that if LB 1 fails, LB 2 takes over and traffic keeps flowing. The active load balancer forwards the request to the **web server**, which passes it to the **application server**, which runs the code and queries the **database server** to build the response. Unlike the earlier designs, each of these three components — web server, application server, database — now lives on its own dedicated machine instead of being bundled together with the others.
+
+## Why each additional element is being added
+
+- **A second load balancer, clustered with the first** — added so the load balancer itself is no longer a single point of failure. The two are configured together (e.g. with a shared virtual IP and a heartbeat check) so that if the active one goes down, the passive one detects it and takes over automatically, with no manual intervention needed.
+- **Splitting the web server, application server, and database onto their own dedicated servers** — added so each component gets its own CPU, RAM, and disk instead of competing for the same resources on a shared machine. This makes it possible to scale, tune, secure, and troubleshoot each layer independently — for example, adding more application servers later without touching the web server or database at all.
+- **The extra server** — this is simply the third machine needed once the web server, application server, and database are each split out onto their own hardware instead of two servers each running all three.
