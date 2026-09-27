@@ -1,0 +1,40 @@
+# 1. Distributed web infrastructure
+
+![Distributed three-server web infrastructure](./1-distributed_web_infrastructure.png)
+
+## Explanation, starting from the user
+
+A user types `www.foobar.com` into their browser. DNS resolves the name to the IP of the **load balancer** rather than directly to a server. The load balancer (HAProxy) receives the request and forwards it to one of two identical servers behind it — **Server 1** or **Server 2**. Each of those servers runs its own web server (Nginx), application server, application files, and MySQL database, exactly like the single-server setup from task 0, just duplicated. Whichever server handles the request builds the response using its own code and database, and sends it back through the load balancer to the user.
+
+## Why each additional element is being added
+
+- **Load balancer (HAProxy)** — added so that no single server has to handle all the traffic alone. It spreads incoming requests across both servers, which increases capacity and means the site can keep running if one server goes down.
+- **A second server** — added for redundancy and capacity. Two identical servers mean the site can survive the loss of one, and can handle roughly twice the traffic of a single-server setup.
+- **A second database (as a Replica)** — added so each server has fast local read access to data and so there's a live copy of the data if the primary database server fails.
+
+## Specifics about this infrastructure
+
+**Distribution algorithm**
+The load balancer here is configured with a **Round Robin** algorithm: it sends each new incoming request to the next server in the list, in order, cycling back to the first once it reaches the last. This spreads load evenly when servers have similar capacity and requests take roughly similar time to process. (Other common algorithms include Least Connections, which sends new requests to whichever server currently has the fewest active connections, and IP Hash, which routes a given client consistently to the same server based on their IP.)
+
+**Active-Active vs Active-Passive**
+This setup is **Active-Active**: both Server 1 and Server 2 are live and actively handling traffic at the same time, with the load balancer splitting requests between them. In an **Active-Passive** setup, only one server (the active one) handles traffic while the second sits on standby, ready to take over only if the active server fails. Active-Active gives better use of resources and higher throughput; Active-Passive is simpler but wastes the standby server's capacity most of the time.
+
+**How a Primary-Replica (Master-Slave) database cluster works**
+The **Primary** node is the only one that accepts write operations (INSERT, UPDATE, DELETE). Every change made on the Primary is recorded and then streamed to the **Replica**, which applies those same changes to keep its own copy of the data in sync. The Replica is typically read-only from the application's point of view — it continuously replays the Primary's changes rather than accepting writes directly.
+
+**Difference between the Primary and Replica nodes for the application**
+The application should send all **write** queries to the Primary, since only it can modify data. **Read** queries can be sent to either node — often the application reads from the Replica to offload traffic from the Primary, which improves performance, but it must account for **replication lag**: because replication isn't instantaneous, a read from the Replica right after a write to the Primary might briefly return stale data.
+
+## Issues with this infrastructure
+
+**Where are the SPOFs (Single Points of Failure)?**
+- The **load balancer** itself is a SPOF: if HAProxy goes down, no traffic reaches either server, even though both servers are healthy.
+- The **Primary database** is a SPOF: if it fails, no writes can be processed anywhere until it's restored or a Replica is manually promoted.
+
+**Security issues**
+- **No firewall** — nothing is restricting which ports or IPs can reach the servers, database, or load balancer, leaving them exposed to unauthorized access and network-level attacks.
+- **No HTTPS** — traffic between the user and the load balancer travels as plain HTTP, so it isn't encrypted. Anyone intercepting the traffic (e.g. on a shared network) can read or tamper with it, including any sensitive data like passwords.
+
+**No monitoring**
+There's no monitoring in place, so nobody would know a server, the database, or the load balancer had failed, was overloaded, or was behaving abnormally until users started reporting problems. Without metrics, logs, and alerting, issues can't be caught or diagnosed proactively.
