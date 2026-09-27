@@ -1,1 +1,20 @@
+# 0. Simple web stack
 
+## The journey of a request
+
+A user types `www.foobar.com` into their browser. Before anything else can happen, that name has to become an IP address, so the browser asks the DNS system to resolve it. The `www` record is a **domain name** entry — specifically an **A record** (or in some setups a CNAME pointing to another name) that maps `www.foobar.com` to the IP `8.8.8.8`. The role of the domain name here is to give people a memorable name instead of forcing them to type raw IP addresses, and to let you point that name at whatever server you're currently using.
+
+Once resolved, the browser sends an HTTP request straight to `8.8.8.8`. That's a single **server** — a physical or virtual machine with its own CPU, RAM, disk, and OS, sitting somewhere reachable over the internet, running the software that answers requests. The server communicates with the user's computer using **HTTP** (or HTTPS), the protocol both sides agree to speak over the network.
+
+## What's inside that one server
+
+- **Web server (Nginx)** — the first thing that receives the incoming request. Its role is to handle the raw HTTP request, serve static files directly (images, CSS, JS), and decide when to hand off dynamic requests to the application.
+- **Application server** — receives what Nginx forwards to it and actually executes the application logic (business rules, routing, generating dynamic pages).
+- **Application files (code base)** — the code the application server runs — the actual website/app logic.
+- **Database (MySQL)** — stores and retrieves persistent data (user accounts, posts, etc.). The application server queries it and uses the result to build the response sent back to the user.
+
+## Why this setup has problems
+
+- **SPOF (Single Point of Failure)** — everything (Nginx, app server, code, DB) lives on one machine. If that server crashes, gets overloaded, or loses network connectivity, the entire site goes down. There's no redundancy anywhere in the stack.
+- **Downtime during maintenance** — because the web server, app server, and DB share the same box, deploying new code or restarting the web server to apply a config change takes the whole site offline, even briefly. There's no way to update one piece without disturbing the others.
+- **Can't scale for traffic** — one server has a fixed ceiling on CPU, RAM, and connections. When traffic spikes past what that machine can handle, there's no second server to share the load — you can only scale *up* (buy a bigger machine), not *out* (add more machines), and even scaling up has a hard limit.
