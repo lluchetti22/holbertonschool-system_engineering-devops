@@ -1,0 +1,41 @@
+# 2. Secured and monitored web infrastructure
+
+![Secured and monitored three-server web infrastructure](./2-secured_and_monitored_web_infrastructure.png)
+
+## Explanation, starting from the user
+
+A user goes to `https://www.foobar.com`. DNS resolves the name and the request reaches the infrastructure over **HTTPS**. It first passes through **Firewall 1**, which filters traffic before it ever reaches the load balancer. The load balancer (HAProxy) terminates the SSL connection — decrypting the HTTPS traffic — and, using round robin, forwards the request through either **Firewall 2** to **Server 1** or **Firewall 3** to **Server 2**. Each server has its own firewall guarding it individually. On whichever server handles the request, the web server, application server, code base, and database work together exactly as in the previous designs, and a **monitoring client** running on that server (and on the load balancer) continuously reports metrics to the monitoring service.
+
+## Why each additional element is being added
+
+- **3 firewalls** — one in front of the load balancer, and one in front of each server, so that every entry point into the infrastructure is filtered, not just the outer edge. This limits what traffic can reach each machine and reduces the attack surface at every layer.
+- **1 SSL certificate** — added so the load balancer can serve the site over HTTPS, encrypting traffic between the user and the infrastructure.
+- **3 monitoring clients** — one per machine (load balancer, Server 1, Server 2) — so every component's health and performance can be tracked individually, not just the infrastructure as a whole.
+
+## Specifics about this infrastructure
+
+**What are firewalls for?**
+A firewall controls incoming and outgoing network traffic based on a set of rules — allowing only expected ports/protocols/sources and blocking everything else. It protects each machine from unauthorized access, port scanning, and many types of network-level attacks.
+
+**Why is traffic served over HTTPS?**
+HTTPS encrypts the traffic between the user's browser and the server using SSL/TLS. Without it, anyone able to intercept the network traffic (e.g. on public Wi-Fi) could read or modify it — including sensitive information like login credentials. HTTPS also lets the user verify they're actually talking to the real `www.foobar.com` via the SSL certificate.
+
+**What is monitoring used for?**
+Monitoring collects metrics and logs from the infrastructure (CPU, memory, disk, response times, error rates, etc.) so that problems can be detected — ideally before users notice them — and so that past incidents can be investigated using historical data.
+
+**How does the monitoring tool collect data?**
+Each server runs a small **monitoring/data-collector client** (an agent) that gathers metrics and logs locally and sends them to the monitoring service (e.g. Sumo Logic), which centralizes, stores, and visualizes the data from all machines in one place.
+
+**How would you monitor your web server's QPS (queries per second)?**
+Since QPS isn't collected by default, you'd set up a custom check or script that reads it from Nginx (e.g. via the `stub_status` module) at regular intervals, and configure the monitoring client to collect and forward that custom metric to the monitoring service so it shows up alongside the built-in metrics and can be graphed or alerted on.
+
+## Issues with this infrastructure
+
+**Why is terminating SSL at the load balancer level an issue?**
+Once SSL is terminated at the load balancer, the traffic between the load balancer and the servers behind it travels **unencrypted**. If someone gains access to that internal network segment, they can read that traffic in plain text — the encryption only protected the user-to-load-balancer leg, not the whole path.
+
+**Why is having only one MySQL server able to accept writes an issue?**
+The Primary database is a **single point of failure** for all write operations: if it goes down, the whole infrastructure can no longer create, update, or delete data — even though the web/app servers and the Replica are still up — until the Primary is repaired or a Replica is promoted.
+
+**Why might having servers with identical components (database, web server, application server) be a problem?**
+When every server is a clone doing everything, each component is competing with the others for the same resources (CPU, RAM, disk I/O) on that one machine, which limits how much any single part can scale. It's also inefficient and harder to secure or tune: a database has very different resource and configuration needs than a web server, and bundling them together means you can't scale, patch, or optimize either one independently.
